@@ -21,14 +21,14 @@ NOVNC_DIR = Path(os.environ.get("NOVNC_DIR", "/usr/share/novnc")).resolve()
 
 NOVNC_URL = os.environ.get(
     "NOVNC_URL",
-    "/vnc/vnc.html?autoconnect=true&resize=scale&path=vnc/websockify",
+    "/novnc/vnc.html?autoconnect=true&resize=scale&path=vnc/websockify",
 )
 
 VNC_HOST = os.environ.get("VNC_HOST", "127.0.0.1")
 VNC_PORT = int(os.environ.get("VNC_PORT", "5900"))
 
 if NOVNC_DIR.exists():
-    app.mount("/vnc", StaticFiles(directory=str(NOVNC_DIR)), name="novnc")
+    app.mount("/novnc", StaticFiles(directory=str(NOVNC_DIR)), name="novnc")
 
 
 jobs: Dict[str, Dict[str, Any]] = {}

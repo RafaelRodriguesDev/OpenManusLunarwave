@@ -7,12 +7,12 @@
 
   <style>
     :root {
-      --bg: #f5f7fb;
-      --bg-soft: #ffffff;
-      --bg-muted: #eef2f7;
-      --surface: rgba(255, 255, 255, 0.88);
+      --bg: #f4f6fb;
+      --bg-rgb: 244, 246, 251;
+      --surface: rgba(255, 255, 255, 0.86);
       --surface-solid: #ffffff;
-      --surface-strong: #f8fafc;
+      --surface-soft: #f8fafc;
+      --surface-hover: #eef2ff;
       --border: rgba(15, 23, 42, 0.10);
       --border-strong: rgba(15, 23, 42, 0.16);
       --text: #0f172a;
@@ -26,18 +26,19 @@
       --terminal-bg: #0b1120;
       --terminal-text: #dbeafe;
       --shadow: 0 24px 80px rgba(15, 23, 42, 0.12);
-      --radius-lg: 22px;
-      --radius-md: 16px;
-      --radius-sm: 12px;
+      --radius-xl: 24px;
+      --radius-lg: 18px;
+      --radius-md: 14px;
+      --radius-sm: 10px;
     }
 
     html[data-theme="dark"] {
       --bg: #050711;
-      --bg-soft: #090d18;
-      --bg-muted: #0d1324;
+      --bg-rgb: 5, 7, 17;
       --surface: rgba(15, 23, 42, 0.76);
       --surface-solid: #0f172a;
-      --surface-strong: #111827;
+      --surface-soft: #111827;
+      --surface-hover: #1e293b;
       --border: rgba(148, 163, 184, 0.14);
       --border-strong: rgba(148, 163, 184, 0.22);
       --text: #f8fafc;
@@ -59,34 +60,40 @@
 
     body {
       margin: 0;
+      width: 100vw;
       height: 100vh;
-      background:
-        radial-gradient(circle at top left, rgba(37, 99, 235, 0.16), transparent 32%),
-        radial-gradient(circle at bottom right, rgba(124, 58, 237, 0.16), transparent 34%),
-        var(--bg);
       color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(37, 99, 235, 0.20), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(124, 58, 237, 0.18), transparent 30%),
+        var(--bg);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
       overflow: hidden;
     }
 
+    button,
+    textarea {
+      font-family: inherit;
+    }
+
     .app-shell {
       height: 100vh;
-      padding: 14px;
+      padding: 12px;
       display: grid;
-      grid-template-rows: 58px 1fr;
-      gap: 14px;
+      grid-template-rows: 56px 1fr;
+      gap: 12px;
     }
 
     .top-nav {
       border: 1px solid var(--border);
       background: var(--surface);
       backdrop-filter: blur(18px);
-      border-radius: var(--radius-lg);
+      border-radius: var(--radius-xl);
       box-shadow: var(--shadow);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 14px;
+      padding: 9px 12px;
       min-width: 0;
     }
 
@@ -100,13 +107,13 @@
     .brand-logo {
       width: 38px;
       height: 38px;
-      border-radius: 14px;
+      border-radius: 15px;
       background: linear-gradient(135deg, var(--primary), var(--primary-2));
       display: grid;
       place-items: center;
       color: white;
       font-weight: 900;
-      letter-spacing: -0.05em;
+      letter-spacing: -0.06em;
       box-shadow: 0 16px 34px rgba(37, 99, 235, 0.28);
       flex: 0 0 auto;
     }
@@ -118,7 +125,7 @@
     }
 
     .brand-title strong {
-      font-size: 16px;
+      font-size: 15px;
       letter-spacing: -0.04em;
       white-space: nowrap;
     }
@@ -134,17 +141,17 @@
     .nav-actions {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
 
     .pill {
-      padding: 8px 12px;
+      padding: 8px 11px;
       border-radius: 999px;
       border: 1px solid var(--border-strong);
       background: var(--surface-solid);
       color: var(--text-soft);
-      font-size: 13px;
-      font-weight: 700;
+      font-size: 12px;
+      font-weight: 800;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -174,15 +181,15 @@
 
     .btn {
       border: 1px solid transparent;
-      border-radius: 14px;
-      padding: 10px 13px;
+      border-radius: 13px;
+      padding: 9px 12px;
       color: white;
-      font-weight: 800;
+      font-weight: 850;
       cursor: pointer;
-      font-size: 13px;
+      font-size: 12px;
       background: linear-gradient(135deg, #2563eb, #7c3aed);
       box-shadow: 0 14px 30px rgba(37, 99, 235, 0.22);
-      transition: transform 0.16s ease, opacity 0.16s ease, border-color 0.16s ease;
+      transition: transform 0.16s ease, opacity 0.16s ease, border-color 0.16s ease, background 0.16s ease;
     }
 
     .btn:hover {
@@ -190,7 +197,7 @@
     }
 
     .btn:disabled {
-      opacity: 0.52;
+      opacity: 0.55;
       cursor: not-allowed;
       transform: none;
       box-shadow: none;
@@ -212,8 +219,8 @@
 
     .main-grid {
       display: grid;
-      grid-template-columns: 370px minmax(0, 1fr) 430px;
-      gap: 14px;
+      grid-template-columns: 340px minmax(0, 1fr) 430px;
+      gap: 12px;
       min-height: 0;
     }
 
@@ -221,48 +228,49 @@
       border: 1px solid var(--border);
       background: var(--surface);
       backdrop-filter: blur(18px);
-      border-radius: var(--radius-lg);
+      border-radius: var(--radius-xl);
       box-shadow: var(--shadow);
       overflow: hidden;
       min-height: 0;
       min-width: 0;
     }
 
-    .chat-panel {
-      display: grid;
-      grid-template-rows: 52px 1fr 224px;
-    }
-
     .panel-header {
-      padding: 14px 16px;
+      height: 48px;
+      padding: 12px 14px;
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: rgba(255, 255, 255, 0.04);
+      background: rgba(255, 255, 255, 0.035);
     }
 
     .panel-header strong {
-      font-size: 14px;
+      font-size: 13px;
       letter-spacing: -0.02em;
     }
 
     .panel-header span {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-muted);
     }
 
+    .chat-panel {
+      display: grid;
+      grid-template-rows: 48px 1fr 214px;
+    }
+
     .chat-messages {
-      padding: 16px;
+      padding: 14px;
       overflow: auto;
     }
 
     .bubble {
-      padding: 14px;
-      border-radius: 18px;
-      margin-bottom: 12px;
+      padding: 13px;
+      border-radius: 17px;
+      margin-bottom: 10px;
       line-height: 1.45;
-      font-size: 14px;
+      font-size: 13px;
       white-space: pre-wrap;
       border: 1px solid var(--border);
       max-width: 100%;
@@ -281,24 +289,23 @@
     }
 
     .composer {
-      padding: 14px;
+      padding: 12px;
       border-top: 1px solid var(--border);
       background: var(--surface-solid);
     }
 
     textarea {
       width: 100%;
-      height: 126px;
+      height: 116px;
       resize: none;
-      background: var(--bg-soft);
+      background: var(--bg);
       color: var(--text);
       border: 1px solid var(--border-strong);
-      border-radius: 16px;
-      padding: 13px;
+      border-radius: 15px;
+      padding: 12px;
       outline: none;
-      font-size: 14px;
+      font-size: 13px;
       line-height: 1.4;
-      font-family: inherit;
     }
 
     textarea:focus {
@@ -309,8 +316,8 @@
     .composer-actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-top: 10px;
+      gap: 8px;
+      margin-top: 9px;
     }
 
     .composer-actions .btn:first-child {
@@ -319,44 +326,55 @@
 
     .work-panel {
       display: grid;
-      grid-template-rows: 52px 1.05fr 0.95fr;
+      grid-template-rows: 48px 1fr 205px;
       min-height: 0;
     }
 
     .execution-area {
-      padding: 16px;
+      padding: 14px;
       overflow: auto;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 12px;
+    }
+
+    .section-block {
       min-height: 0;
     }
 
     .section-title {
-      margin: 0 0 12px;
-      font-size: 12px;
+      margin: 0 0 10px;
+      font-size: 11px;
       text-transform: uppercase;
       color: var(--primary);
-      letter-spacing: 0.12em;
-      font-weight: 900;
+      letter-spacing: 0.14em;
+      font-weight: 950;
     }
 
     .timeline {
       display: grid;
-      gap: 10px;
-      margin-bottom: 18px;
+      grid-template-columns: repeat(6, minmax(92px, 1fr));
+      gap: 8px;
+      margin-bottom: 4px;
     }
 
     .step {
       background: var(--surface-solid);
       border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 12px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
+      border-radius: 14px;
+      padding: 10px;
+      display: grid;
+      grid-template-columns: 11px 1fr;
+      align-items: start;
+      gap: 8px;
+      min-height: 62px;
     }
 
     .dot {
-      width: 12px;
-      height: 12px;
+      width: 10px;
+      height: 10px;
+      margin-top: 2px;
       border-radius: 999px;
       background: var(--text-muted);
       flex: 0 0 auto;
@@ -364,53 +382,61 @@
 
     .step.done .dot {
       background: var(--success);
-      box-shadow: 0 0 16px rgba(34, 197, 94, 0.42);
+      box-shadow: 0 0 14px rgba(34, 197, 94, 0.42);
     }
 
     .step.running .dot {
       background: var(--primary);
-      box-shadow: 0 0 18px rgba(96, 165, 250, 0.75);
+      box-shadow: 0 0 16px rgba(96, 165, 250, 0.75);
     }
 
     .step.failed .dot {
       background: var(--danger);
-      box-shadow: 0 0 18px rgba(239, 68, 68, 0.65);
+      box-shadow: 0 0 16px rgba(239, 68, 68, 0.65);
     }
 
     .step-name {
-      font-weight: 900;
+      font-weight: 850;
       color: var(--text);
-      font-size: 14px;
+      font-size: 11.5px;
+      line-height: 1.22;
     }
 
     .step-status {
       color: var(--text-muted);
-      font-size: 12px;
-      margin-top: 2px;
+      font-size: 10.5px;
+      margin-top: 3px;
     }
 
     .result-box {
-      background: var(--bg-soft);
+      background: var(--bg);
       border: 1px solid var(--border-strong);
       border-radius: 18px;
-      min-height: 180px;
-      padding: 16px;
+      height: 100%;
+      min-height: 210px;
+      padding: 15px;
       white-space: pre-wrap;
       line-height: 1.5;
       color: var(--text-soft);
       overflow: auto;
-      font-size: 14px;
+      font-size: 13px;
+    }
+
+    .result-box.error {
+      border-color: rgba(239, 68, 68, 0.45);
+      background: rgba(239, 68, 68, 0.08);
+      color: var(--text);
     }
 
     .logs-area {
       border-top: 1px solid var(--border);
       display: grid;
-      grid-template-rows: 42px 1fr;
+      grid-template-rows: 38px 1fr;
       min-height: 0;
     }
 
     .logs-toolbar {
-      padding: 10px 14px;
+      padding: 8px 12px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -419,46 +445,47 @@
     }
 
     .logs-toolbar strong {
-      font-size: 13px;
+      font-size: 12px;
     }
 
     .logs {
       background: var(--terminal-bg);
       color: var(--terminal-text);
-      padding: 14px;
+      padding: 12px;
       overflow: auto;
       font-family: Consolas, "SFMono-Regular", monospace;
-      font-size: 12px;
+      font-size: 11.5px;
       white-space: pre-wrap;
+      line-height: 1.45;
     }
 
     .preview-panel {
       display: grid;
-      grid-template-rows: 52px 1fr 220px;
+      grid-template-rows: 48px 1fr 190px;
       min-height: 0;
     }
 
     .preview-frame-wrap {
-      padding: 14px;
+      padding: 12px;
       min-height: 0;
     }
 
     .browser-card {
       height: 100%;
-      min-height: 360px;
+      min-height: 330px;
       border: 1px solid var(--border-strong);
       border-radius: 20px;
       overflow: hidden;
       background: #020617;
       display: grid;
-      grid-template-rows: 42px 1fr;
+      grid-template-rows: 40px 1fr;
     }
 
     .browser-bar {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 9px 11px;
+      padding: 8px 10px;
       background: #111827;
       border-bottom: 1px solid rgba(148, 163, 184, 0.20);
     }
@@ -466,6 +493,7 @@
     .traffic {
       display: flex;
       gap: 6px;
+      flex: 0 0 auto;
     }
 
     .traffic span {
@@ -488,7 +516,7 @@
       display: flex;
       align-items: center;
       padding: 0 10px;
-      font-size: 12px;
+      font-size: 11px;
       overflow: hidden;
       white-space: nowrap;
       text-overflow: ellipsis;
@@ -503,22 +531,22 @@
 
     .workspace-area {
       border-top: 1px solid var(--border);
-      padding: 14px;
+      padding: 12px;
       overflow: auto;
       min-height: 0;
     }
 
     .files {
       display: grid;
-      gap: 9px;
+      gap: 8px;
     }
 
     .file {
       background: var(--surface-solid);
       border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 11px;
-      font-size: 12px;
+      border-radius: 13px;
+      padding: 10px;
+      font-size: 11px;
     }
 
     .file strong {
@@ -537,18 +565,33 @@
       text-decoration: none;
       display: inline-block;
       margin-top: 6px;
-      font-weight: 800;
+      font-weight: 850;
     }
 
     .empty {
       color: var(--text-muted);
-      font-size: 14px;
+      font-size: 13px;
       padding: 8px 0;
     }
 
-    @media (max-width: 1320px) {
+    .mini-hint {
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
+    @media (max-width: 1380px) {
       .main-grid {
-        grid-template-columns: 340px minmax(0, 1fr);
+        grid-template-columns: 320px minmax(0, 1fr) 390px;
+      }
+
+      .timeline {
+        grid-template-columns: repeat(3, minmax(110px, 1fr));
+      }
+    }
+
+    @media (max-width: 1160px) {
+      .main-grid {
+        grid-template-columns: 320px minmax(0, 1fr);
       }
 
       .preview-panel {
@@ -587,6 +630,10 @@
       .pill {
         display: none;
       }
+
+      .timeline {
+        grid-template-columns: 1fr 1fr;
+      }
     }
   </style>
 </head>
@@ -621,12 +668,12 @@
 
         <div class="chat-messages" id="chat">
           <div class="bubble system">
-            Pronto. Envie uma tarefa para o agente executar. Para testar o workspace, peça para criar um arquivo em /workspace.
+            Pronto. Envie uma tarefa para o agente executar. Para testar, peça para criar um arquivo em /workspace.
           </div>
         </div>
 
         <div class="composer">
-          <textarea id="prompt" placeholder="Ex: Abra o navegador, pesquise sobre OpenManus e crie /workspace/resumo.md com o resumo."></textarea>
+          <textarea id="prompt" placeholder="Ex: Crie um arquivo /workspace/teste.txt dizendo que o OpenManusWeb está funcionando."></textarea>
 
           <div class="composer-actions">
             <button class="btn" id="runBtn" onclick="runTask()">Executar tarefa</button>
@@ -643,19 +690,24 @@
         </div>
 
         <div class="execution-area">
-          <h2 class="section-title">Fluxo do agente</h2>
-          <div class="timeline" id="timeline">
-            <div class="empty">Nenhuma execução ainda.</div>
+          <div class="section-block">
+            <h2 class="section-title">Fluxo do agente</h2>
+            <div class="timeline" id="timeline">
+              <div class="empty">Nenhuma execução ainda.</div>
+            </div>
           </div>
 
-          <h2 class="section-title">Resultado</h2>
-          <div class="result-box" id="result">O resultado final aparecerá aqui.</div>
+          <div class="section-block">
+            <h2 class="section-title">Resultado</h2>
+            <div class="result-box" id="result">O resultado final aparecerá aqui.</div>
+          </div>
         </div>
 
         <div class="logs-area">
           <div class="logs-toolbar">
             <strong>Terminal</strong>
-            <button class="btn ghost" style="padding: 7px 10px;" onclick="clearLogs()">Limpar logs</button>
+            <span class="mini-hint">logs reais do processo</span>
+            <button class="btn ghost" style="padding: 6px 9px;" onclick="clearLogs()">Limpar</button>
           </div>
           <div class="logs" id="logs">Logs aparecerão aqui.</div>
         </div>
@@ -736,20 +788,11 @@
       const dot = document.getElementById("statusDot");
 
       document.getElementById("status").innerText = statusText;
-
       dot.className = "status-dot";
 
-      if (statusText === "running") {
-        dot.classList.add("running");
-      }
-
-      if (statusText === "completed") {
-        dot.classList.add("completed");
-      }
-
-      if (statusText === "failed") {
-        dot.classList.add("failed");
-      }
+      if (statusText === "running") dot.classList.add("running");
+      if (statusText === "completed") dot.classList.add("completed");
+      if (statusText === "failed") dot.classList.add("failed");
     }
 
     function renderJob(job) {
@@ -775,12 +818,19 @@
 
       document.getElementById("logs").innerText = (job.logs || []).join("\n");
 
+      const result = document.getElementById("result");
+      result.classList.remove("error");
+
       if (job.result) {
-        document.getElementById("result").innerText = job.result;
+        result.innerText = job.result;
       }
 
       if (job.error) {
-        document.getElementById("result").innerText = job.error;
+        result.classList.add("error");
+        result.innerText =
+          "A execução falhou.\n\nErro:\n" +
+          job.error +
+          "\n\nVeja os detalhes no Terminal abaixo.";
       }
 
       const logs = document.getElementById("logs");
@@ -807,12 +857,13 @@
       }
 
       document.getElementById("runBtn").disabled = true;
+      document.getElementById("result").classList.remove("error");
       document.getElementById("result").innerText = "";
       document.getElementById("logs").innerText = "Criando job...";
       updateStatus("running");
 
       appendChat("user", prompt);
-      appendChat("system", "Executando tarefa...");
+      appendChat("system", "Tarefa enviada. Acompanhe o fluxo, terminal e preview.");
 
       const response = await fetch("/api/run", {
         method: "POST",
@@ -835,9 +886,7 @@
     }
 
     function connectSocket(jobId) {
-      if (socket) {
-        socket.close();
-      }
+      if (socket) socket.close();
 
       if (pollingTimer) {
         clearInterval(pollingTimer);
@@ -867,9 +916,7 @@
     }
 
     function startPolling(jobId) {
-      if (pollingTimer) {
-        clearInterval(pollingTimer);
-      }
+      if (pollingTimer) clearInterval(pollingTimer);
 
       pollingTimer = setInterval(async function() {
         try {
@@ -914,6 +961,7 @@
     }
 
     function clearUi() {
+      document.getElementById("result").classList.remove("error");
       document.getElementById("result").innerText = "O resultado final aparecerá aqui.";
       document.getElementById("logs").innerText = "Logs aparecerão aqui.";
       document.getElementById("timeline").innerHTML = '<div class="empty">Nenhuma execução ainda.</div>';
@@ -921,32 +969,31 @@
     }
 
     async function loadConfig() {
-    try {
+      try {
         const response = await fetch("/api/config");
         const config = await response.json();
 
         if (config.novnc_url) {
-        document.getElementById("previewFrame").src = config.novnc_url;
+          document.getElementById("previewFrame").src = config.novnc_url;
         } else {
-        document.getElementById("previewFrame").src = "/preview";
+          document.getElementById("previewFrame").src = "/preview";
         }
-    } catch (error) {
+      } catch (error) {
         document.getElementById("previewFrame").src = "/preview";
-    }
+      }
     }
 
     function reloadPreview() {
-    loadConfig();
+      loadConfig();
     }
 
     function openPreview() {
-    window.open("/preview", "_blank");
-    }   
+      window.open("/preview", "_blank");
+    }
 
     applyTheme(getSavedTheme());
     loadConfig();
     loadFiles();
-    
   </script>
 </body>
 </html>
