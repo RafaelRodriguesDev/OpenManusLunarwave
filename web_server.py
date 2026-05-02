@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 
-app = FastAPI(title="OpenManusWeb", version="0.4.0")
+app = FastAPI(title="OpenManusWeb", version="0.4.1")
 
 BASE_DIR = Path(os.environ.get("OPENMANUS_DIR", "/app/OpenManus")).resolve()
 WORKSPACE_DIR = Path(os.environ.get("WORKSPACE_DIR", "/workspace")).resolve()
@@ -169,6 +169,20 @@ def clean_log_line(line: str) -> str:
 
 
 def is_noise_line(line: str) -> bool:
+    clean = line.strip()
+
+    if not clean:
+        return True
+
+    exact_noise_lines = [
+        "warnings.warn(",
+        "warnings.warn(message, UserWarning)",
+        "warnings.warn(message, RequestsDependencyWarning)",
+    ]
+
+    if clean in exact_noise_lines:
+        return True
+
     noise_markers = [
         "RequestsDependencyWarning",
         "urllib3",
@@ -183,9 +197,11 @@ def is_noise_line(line: str) -> bool:
         "Daytona target set to",
         "Daytona client initialized",
         "Valid config keys have changed in V2",
+        "UserWarning:",
+        "site-packages/requests/__init__.py",
     ]
 
-    return any(marker in line for marker in noise_markers)
+    return any(marker in clean for marker in noise_markers)
 
 
 def extract_thought(line: str) -> Optional[str]:
@@ -206,6 +222,7 @@ def extract_tool_action(line: str) -> Optional[str]:
         "File created successfully at:",
         "Navigated to",
         "Extracted from page:",
+        "The interaction has been completed with status:",
     ]
 
     for marker in markers:
@@ -213,6 +230,21 @@ def extract_tool_action(line: str) -> Optional[str]:
             return line.strip()
 
     return None
+
+
+def normalize_final_answer(answer: str) -> str:
+    clean = answer.strip()
+
+    if not clean:
+        return "Tarefa concluída com sucesso."
+
+    if "Tudo pronto!" in clean:
+        return clean
+
+    if "Pronto!" in clean:
+        return clean
+
+    return clean
 
 
 def extract_final_answer(output_lines: List[str]) -> str:
@@ -230,10 +262,12 @@ def extract_final_answer(output_lines: List[str]) -> str:
         if item
         and not item.lower().startswith("vou começar")
         and not item.lower().startswith("perfeito! a página foi carregada")
+        and not item.lower().startswith("agora já tenho as informações")
+        and not item.lower().startswith("vou verificar")
     ]
 
     if useful_thoughts:
-        return useful_thoughts[-1]
+        return normalize_final_answer(useful_thoughts[-1])
 
     success_markers = [
         "The interaction has been completed with status: success",
@@ -253,7 +287,7 @@ def extract_final_answer(output_lines: List[str]) -> str:
         if is_noise_line(clean):
             continue
 
-        return clean
+        return normalize_final_answer(clean)
 
     return "Tarefa concluída com sucesso."
 

@@ -33,7 +33,7 @@ extra_chromium_args = [
   "--no-sandbox",
   "--disable-dev-shm-usage",
   "--disable-gpu",
-  "--window-size=1365,768"
+  "--window-size=1440,900"
 ]
 chrome_instance_path = ""
 wss_url = ""
@@ -79,7 +79,7 @@ rm -f /tmp/.X99-lock
 rm -rf /tmp/.X11-unix/X99
 
 echo "Iniciando Xvfb..."
-Xvfb :99 -screen 0 1365x768x24 -ac +extension GLX +render -noreset &
+Xvfb :99 -screen 0 1440x900x24 -ac +extension GLX +render -noreset &
 
 sleep 2
 
@@ -102,6 +102,6 @@ ln -s /workspace /app/OpenManus/workspace
 
 echo "OpenManusWeb iniciado."
 echo "Interface pública: http://IP_DA_VPS:8001"
-echo "Preview interno: /vnc/vnc.html?autoconnect=true&resize=scale&path=vnc/websockify"
+echo "Preview interno: /novnc/vnc.html?autoconnect=true&resize=scale&path=vnc/websockify"
 
 exec uvicorn web_server:app --host 0.0.0.0 --port 8000
