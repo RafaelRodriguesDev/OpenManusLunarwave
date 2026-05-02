@@ -71,6 +71,13 @@ EOF
 
 echo "Config gerado em /app/OpenManus/config/config.toml"
 
+echo "Limpando display antigo..."
+pkill Xvfb || true
+pkill fluxbox || true
+pkill x11vnc || true
+rm -f /tmp/.X99-lock
+rm -rf /tmp/.X11-unix/X99
+
 echo "Iniciando Xvfb..."
 Xvfb :99 -screen 0 1365x768x24 -ac +extension GLX +render -noreset &
 
