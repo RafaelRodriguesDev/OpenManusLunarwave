@@ -13,7 +13,8 @@ services:
     stdin_open: true
 
     ports:
-      - "8000:8000"
+      - "8001:8000"
+      - "6080:6080"
 
     environment:
       LLM_MODEL: ${LLM_MODEL:-deepseek-chat}
@@ -28,6 +29,7 @@ services:
       VISION_API_KEY: ${VISION_API_KEY:-${LLM_API_KEY}}
 
       WORKSPACE_DIR: /workspace
+      DISPLAY: :99
 
     volumes:
       - openmanus_web_workspace:/workspace
