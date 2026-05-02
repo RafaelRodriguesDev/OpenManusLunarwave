@@ -2,12 +2,23 @@ FROM python:3.12-slim
 
 WORKDIR /app/OpenManus
 
-RUN apt-get update && apt-get install -y --no-install-recommends git curl \
+ENV PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    bash \
+    build-essential \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && (command -v uv >/dev/null 2>&1 || pip install --no-cache-dir uv)
+    && pip install --no-cache-dir uv
 
 COPY . .
 
 RUN uv pip install --system -r requirements.txt
 
-CMD ["bash"]
+COPY entrypoint.sh /entrypoint.sh
+
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

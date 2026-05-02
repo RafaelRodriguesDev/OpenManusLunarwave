@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  openmanus:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: openmanus
+    restart: unless-stopped
+
+    tty: true
+    stdin_open: true
+
+    environment:
+      LLM_MODEL: ${LLM_MODEL:-deepseek-chat}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.deepseek.com}
+      LLM_API_KEY: ${LLM_API_KEY}
+
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-8192}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.0}
+
+      VISION_MODEL: ${VISION_MODEL:-deepseek-chat}
+      VISION_BASE_URL: ${VISION_BASE_URL:-https://api.deepseek.com}
+      VISION_API_KEY: ${VISION_API_KEY:-${LLM_API_KEY}}
+
+    volumes:
+      - openmanus_workspace:/workspace
+
+volumes:
+  openmanus_workspace:
