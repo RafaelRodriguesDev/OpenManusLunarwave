@@ -1,6 +1,6 @@
 FROM python:3.12-bookworm
 
-WORKDIR /app/OpenManus
+WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1
 ENV PIP_NO_CACHE_DIR=1
@@ -29,16 +29,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip install --no-cache-dir uv
 
-COPY . .
+RUN git clone https://github.com/FoundationAgents/OpenManus.git /app/OpenManus
+
+WORKDIR /app/OpenManus
+
+RUN sed -i 's/pillow~=11.1.0/pillow>=10.4,<11.0/g' requirements.txt
 
 RUN uv venv --python 3.12
 
 RUN uv pip install --upgrade pip setuptools wheel
 
-RUN uv pip install -r requirements.txt --verbose
+RUN uv pip install -r requirements.txt
 
 RUN python -m playwright install --with-deps chromium
 
+COPY web_server.py /app/OpenManus/web_server.py
 COPY entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh

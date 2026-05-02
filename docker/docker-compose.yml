@@ -1,16 +1,19 @@
 version: "3.9"
 
 services:
-  openmanus:
+  openmanus-web:
     build:
       context: ..
       dockerfile: Dockerfile
 
-    container_name: openmanus
+    container_name: openmanus-web
     restart: unless-stopped
 
     tty: true
     stdin_open: true
+
+    ports:
+      - "8000:8000"
 
     environment:
       LLM_MODEL: ${LLM_MODEL:-deepseek-chat}
@@ -24,8 +27,10 @@ services:
       VISION_BASE_URL: ${VISION_BASE_URL:-https://api.deepseek.com}
       VISION_API_KEY: ${VISION_API_KEY:-${LLM_API_KEY}}
 
+      WORKSPACE_DIR: /workspace
+
     volumes:
-      - openmanus_workspace:/workspace
+      - openmanus_web_workspace:/workspace
 
 volumes:
-  openmanus_workspace:
+  openmanus_web_workspace:

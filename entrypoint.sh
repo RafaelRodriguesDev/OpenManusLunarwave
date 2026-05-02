@@ -2,6 +2,7 @@
 set -e
 
 mkdir -p /app/OpenManus/config
+mkdir -p /workspace
 
 if [ -z "$LLM_API_KEY" ]; then
   echo "Erro: variável LLM_API_KEY não foi definida."
@@ -35,4 +36,7 @@ cd /app/OpenManus
 
 . .venv/bin/activate
 
-exec python main.py
+echo "OpenManusWeb iniciado."
+echo "Acesse: http://IP_DA_VPS:8000"
+
+exec uvicorn web_server:app --host 0.0.0.0 --port 8000
