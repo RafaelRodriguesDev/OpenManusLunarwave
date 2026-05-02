@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import sys
 import uuid
 from datetime import datetime
@@ -12,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 
-app = FastAPI(title="OpenManusWeb", version="0.3.1")
+app = FastAPI(title="OpenManusWeb", version="0.4.0")
 
 BASE_DIR = Path(os.environ.get("OPENMANUS_DIR", "/app/OpenManus")).resolve()
 WORKSPACE_DIR = Path(os.environ.get("WORKSPACE_DIR", "/workspace")).resolve()
@@ -53,6 +54,8 @@ def create_job(prompt: str) -> Dict[str, Any]:
         "created_at": utc_now(),
         "updated_at": utc_now(),
         "logs": ["Job criado."],
+        "technical_logs": [],
+        "thoughts": [],
         "result": "",
         "error": None,
         "exit_code": None,
@@ -92,9 +95,48 @@ async def notify(job_id: str) -> None:
 
 
 async def add_log(job_id: str, message: str) -> None:
+    if job_id not in jobs:
+        return
+
+    clean_message = message.rstrip()
+
+    if not clean_message:
+        return
+
     job = jobs[job_id]
-    job["logs"].append(message.rstrip())
+    job["logs"].append(clean_message)
     job["updated_at"] = utc_now()
+
+    await notify(job_id)
+
+
+async def add_technical_log(job_id: str, message: str) -> None:
+    if job_id not in jobs:
+        return
+
+    clean_message = message.rstrip()
+
+    if not clean_message:
+        return
+
+    job = jobs[job_id]
+    job["technical_logs"].append(clean_message)
+    job["updated_at"] = utc_now()
+
+
+async def add_thought(job_id: str, thought: str) -> None:
+    if job_id not in jobs:
+        return
+
+    clean_thought = thought.strip()
+
+    if not clean_thought:
+        return
+
+    job = jobs[job_id]
+    job["thoughts"].append(clean_thought)
+    job["updated_at"] = utc_now()
+
     await notify(job_id)
 
 
@@ -102,6 +144,7 @@ async def set_status(job_id: str, status: str) -> None:
     job = jobs[job_id]
     job["status"] = status
     job["updated_at"] = utc_now()
+
     await notify(job_id)
 
 
@@ -114,7 +157,105 @@ async def set_step(job_id: str, step_name: str, status: str) -> None:
             break
 
     job["updated_at"] = utc_now()
+
     await notify(job_id)
+
+
+def clean_log_line(line: str) -> str:
+    without_ansi = re.sub(r"\x1b\[[0-9;]*m", "", line)
+    without_control = without_ansi.replace("\r", "").strip()
+
+    return without_control
+
+
+def is_noise_line(line: str) -> bool:
+    noise_markers = [
+        "RequestsDependencyWarning",
+        "urllib3",
+        "charset_normalizer",
+        "pydantic/_internal/_config.py",
+        "underscore_attrs_are_private",
+        "Anonymized telemetry enabled",
+        "BrowserUse logging setup",
+        "Initializing Daytona sandbox configuration",
+        "Daytona API key configured successfully",
+        "Daytona server URL set to",
+        "Daytona target set to",
+        "Daytona client initialized",
+        "Valid config keys have changed in V2",
+    ]
+
+    return any(marker in line for marker in noise_markers)
+
+
+def extract_thought(line: str) -> Optional[str]:
+    marker = "Manus's thoughts:"
+
+    if marker not in line:
+        return None
+
+    return line.split(marker, 1)[1].strip()
+
+
+def extract_tool_action(line: str) -> Optional[str]:
+    markers = [
+        "Tools being prepared:",
+        "Tool arguments:",
+        "Activating tool:",
+        "completed its mission!",
+        "File created successfully at:",
+        "Navigated to",
+        "Extracted from page:",
+    ]
+
+    for marker in markers:
+        if marker in line:
+            return line.strip()
+
+    return None
+
+
+def extract_final_answer(output_lines: List[str]) -> str:
+    final_thoughts: List[str] = []
+
+    for line in output_lines:
+        clean = clean_log_line(line)
+        thought = extract_thought(clean)
+
+        if thought:
+            final_thoughts.append(thought)
+
+    useful_thoughts = [
+        item for item in final_thoughts
+        if item
+        and not item.lower().startswith("vou começar")
+        and not item.lower().startswith("perfeito! a página foi carregada")
+    ]
+
+    if useful_thoughts:
+        return useful_thoughts[-1]
+
+    success_markers = [
+        "The interaction has been completed with status: success",
+        "Request processing completed",
+        "Processo finalizado com sucesso",
+    ]
+
+    for line in reversed(output_lines):
+        clean = clean_log_line(line)
+
+        if not clean:
+            continue
+
+        if any(marker in clean for marker in success_markers):
+            continue
+
+        if is_noise_line(clean):
+            continue
+
+        return clean
+
+    return "Tarefa concluída com sucesso."
 
 
 async def run_openmanus_process(job_id: str, prompt: str) -> None:
@@ -184,10 +325,28 @@ async def run_openmanus_process(job_id: str, prompt: str) -> None:
                 break
 
             decoded = line.decode("utf-8", errors="replace").rstrip()
-            output_lines.append(decoded)
+            cleaned = clean_log_line(decoded)
 
-            if decoded.strip():
-                await add_log(job_id, decoded)
+            if not cleaned:
+                continue
+
+            output_lines.append(cleaned)
+
+            await add_technical_log(job_id, cleaned)
+
+            thought = extract_thought(cleaned)
+
+            if thought:
+                await add_thought(job_id, thought)
+
+            tool_action = extract_tool_action(cleaned)
+
+            if tool_action and not is_noise_line(tool_action):
+                await add_log(job_id, tool_action)
+                continue
+
+            if not is_noise_line(cleaned):
+                await add_log(job_id, cleaned)
 
         exit_code = await proc.wait()
 
@@ -196,17 +355,19 @@ async def run_openmanus_process(job_id: str, prompt: str) -> None:
         await set_step(job_id, "Executar tarefa", "done")
         await set_step(job_id, "Capturar resultado", "running")
 
-        final_output = "\n".join(output_lines).strip()
-
         if exit_code == 0:
-            jobs[job_id]["result"] = final_output or "OpenManus finalizou sem saída textual."
+            jobs[job_id]["result"] = extract_final_answer(output_lines)
+            jobs[job_id]["updated_at"] = utc_now()
+
             await add_log(job_id, "Processo finalizado com sucesso.")
             await set_step(job_id, "Capturar resultado", "done")
             await set_step(job_id, "Finalizar", "done")
             await set_status(job_id, "completed")
         else:
-            jobs[job_id]["result"] = final_output
+            jobs[job_id]["result"] = extract_final_answer(output_lines)
             jobs[job_id]["error"] = f"OpenManus finalizou com código {exit_code}."
+            jobs[job_id]["updated_at"] = utc_now()
+
             await add_log(job_id, f"Processo finalizado com erro. Exit code: {exit_code}")
             await set_step(job_id, "Capturar resultado", "failed")
             await set_step(job_id, "Finalizar", "failed")
@@ -231,7 +392,9 @@ async def run_openmanus_process(job_id: str, prompt: str) -> None:
 def safe_workspace_path(relative_path: str) -> Path:
     requested_path = (WORKSPACE_DIR / relative_path).resolve()
 
-    if not str(requested_path).startswith(str(WORKSPACE_DIR)):
+    try:
+        requested_path.relative_to(WORKSPACE_DIR)
+    except ValueError:
         raise HTTPException(status_code=400, detail="Caminho inválido.")
 
     return requested_path

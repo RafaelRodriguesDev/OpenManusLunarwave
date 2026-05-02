@@ -335,7 +335,7 @@
       overflow: auto;
       min-height: 0;
       display: grid;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto auto 1fr;
       gap: 12px;
     }
 
@@ -408,18 +408,42 @@
       margin-top: 3px;
     }
 
+    .thought-box {
+      background: var(--surface-solid);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      min-height: 86px;
+      max-height: 145px;
+      padding: 13px;
+      white-space: pre-wrap;
+      overflow: auto;
+      color: var(--text-soft);
+      font-size: 12.5px;
+      line-height: 1.45;
+    }
+
+    .thought-box.empty-state {
+      color: var(--text-muted);
+    }
+
     .result-box {
       background: var(--bg);
       border: 1px solid var(--border-strong);
       border-radius: 18px;
       height: 100%;
-      min-height: 210px;
+      min-height: 160px;
       padding: 15px;
       white-space: pre-wrap;
       line-height: 1.5;
       color: var(--text-soft);
       overflow: auto;
       font-size: 13px;
+    }
+
+    .result-box.success {
+      border-color: rgba(34, 197, 94, 0.35);
+      background: rgba(34, 197, 94, 0.07);
+      color: var(--text);
     }
 
     .result-box.error {
@@ -440,6 +464,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 8px;
       background: var(--surface-solid);
       border-bottom: 1px solid var(--border);
     }
@@ -463,6 +488,54 @@
       display: grid;
       grid-template-rows: 48px 1fr 190px;
       min-height: 0;
+    }
+
+    .preview-panel.expanded {
+      position: fixed;
+      inset: 12px;
+      z-index: 9999;
+      display: grid !important;
+      grid-template-rows: 52px 1fr 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      box-shadow: 0 30px 120px rgba(0, 0, 0, 0.65);
+    }
+
+    .preview-panel.expanded .workspace-area {
+      display: none;
+    }
+
+    .preview-panel.expanded .preview-frame-wrap {
+      padding: 12px;
+    }
+
+    .preview-panel.expanded .browser-card {
+      min-height: 0;
+      height: 100%;
+    }
+
+    .preview-panel.expanded iframe {
+      height: 100%;
+    }
+
+    .preview-overlay-backdrop {
+      display: none;
+    }
+
+    body.preview-open .preview-overlay-backdrop {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 9998;
+      background: rgba(0, 0, 0, 0.58);
+      backdrop-filter: blur(6px);
+    }
+
+    .preview-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
     .preview-frame-wrap {
@@ -597,6 +670,10 @@
       .preview-panel {
         display: none;
       }
+
+      .preview-panel.expanded {
+        display: grid !important;
+      }
     }
 
     @media (max-width: 900px) {
@@ -639,6 +716,8 @@
 </head>
 
 <body>
+  <div class="preview-overlay-backdrop" onclick="togglePreviewSize(false)"></div>
+
   <div class="app-shell">
     <header class="top-nav">
       <div class="brand">
@@ -673,7 +752,7 @@
         </div>
 
         <div class="composer">
-          <textarea id="prompt" placeholder="Ex: Crie um arquivo /workspace/teste.txt dizendo que o OpenManusWeb está funcionando."></textarea>
+          <textarea id="prompt" placeholder="Ex: Abra o navegador, acesse https://example.com e crie /workspace/browser-test.txt com o resultado."></textarea>
 
           <div class="composer-actions">
             <button class="btn" id="runBtn" onclick="runTask()">Executar tarefa</button>
@@ -686,7 +765,7 @@
       <section class="panel work-panel">
         <div class="panel-header">
           <strong>Execução</strong>
-          <span>Fluxo, resultado e logs</span>
+          <span>Fluxo, pensamento, resultado e logs</span>
         </div>
 
         <div class="execution-area">
@@ -698,6 +777,11 @@
           </div>
 
           <div class="section-block">
+            <h2 class="section-title">Pensamento</h2>
+            <div class="thought-box empty-state" id="thoughts">O raciocínio do agente aparecerá aqui.</div>
+          </div>
+
+          <div class="section-block">
             <h2 class="section-title">Resultado</h2>
             <div class="result-box" id="result">O resultado final aparecerá aqui.</div>
           </div>
@@ -706,7 +790,7 @@
         <div class="logs-area">
           <div class="logs-toolbar">
             <strong>Terminal</strong>
-            <span class="mini-hint">logs reais do processo</span>
+            <span class="mini-hint">logs úteis do processo</span>
             <button class="btn ghost" style="padding: 6px 9px;" onclick="clearLogs()">Limpar</button>
           </div>
           <div class="logs" id="logs">Logs aparecerão aqui.</div>
@@ -716,7 +800,12 @@
       <section class="panel preview-panel">
         <div class="panel-header">
           <strong>Preview visual</strong>
-          <span>noVNC / navegador</span>
+
+          <div class="preview-actions">
+            <span>noVNC / navegador</span>
+            <button class="btn ghost" style="padding: 6px 9px;" onclick="reloadPreview()">↻</button>
+            <button class="btn secondary" id="previewSizeBtn" style="padding: 6px 9px;" onclick="togglePreviewSize()">Expandir</button>
+          </div>
         </div>
 
         <div class="preview-frame-wrap">
@@ -728,7 +817,6 @@
                 <span></span>
               </div>
               <div class="url-bar">/preview · noVNC</div>
-              <button class="btn ghost" style="padding: 6px 9px;" onclick="reloadPreview()">↻</button>
             </div>
 
             <iframe id="previewFrame" src="about:blank"></iframe>
@@ -818,11 +906,21 @@
 
       document.getElementById("logs").innerText = (job.logs || []).join("\n");
 
+      const thoughts = document.getElementById("thoughts");
+      if (job.thoughts && job.thoughts.length) {
+        thoughts.classList.remove("empty-state");
+        thoughts.innerText = job.thoughts.join("\n\n");
+      }
+
       const result = document.getElementById("result");
-      result.classList.remove("error");
+      result.classList.remove("error", "success");
 
       if (job.result) {
         result.innerText = job.result;
+
+        if (job.status === "completed") {
+          result.classList.add("success");
+        }
       }
 
       if (job.error) {
@@ -857,13 +955,20 @@
       }
 
       document.getElementById("runBtn").disabled = true;
-      document.getElementById("result").classList.remove("error");
-      document.getElementById("result").innerText = "";
+
+      const result = document.getElementById("result");
+      result.classList.remove("error", "success");
+      result.innerText = "";
+
+      const thoughts = document.getElementById("thoughts");
+      thoughts.classList.add("empty-state");
+      thoughts.innerText = "O agente está pensando e executando a tarefa...";
+
       document.getElementById("logs").innerText = "Criando job...";
       updateStatus("running");
 
       appendChat("user", prompt);
-      appendChat("system", "Tarefa enviada. Acompanhe o fluxo, terminal e preview.");
+      appendChat("system", "Tarefa enviada. Acompanhe pensamento, terminal e preview.");
 
       const response = await fetch("/api/run", {
         method: "POST",
@@ -961,8 +1066,14 @@
     }
 
     function clearUi() {
-      document.getElementById("result").classList.remove("error");
-      document.getElementById("result").innerText = "O resultado final aparecerá aqui.";
+      const result = document.getElementById("result");
+      result.classList.remove("error", "success");
+      result.innerText = "O resultado final aparecerá aqui.";
+
+      const thoughts = document.getElementById("thoughts");
+      thoughts.classList.add("empty-state");
+      thoughts.innerText = "O raciocínio do agente aparecerá aqui.";
+
       document.getElementById("logs").innerText = "Logs aparecerão aqui.";
       document.getElementById("timeline").innerHTML = '<div class="empty">Nenhuma execução ainda.</div>';
       updateStatus("aguardando");
@@ -990,6 +1101,43 @@
     function openPreview() {
       window.open("/preview", "_blank");
     }
+
+    function togglePreviewSize(forceState) {
+      const panel = document.querySelector(".preview-panel");
+      const button = document.getElementById("previewSizeBtn");
+
+      if (!panel) return;
+
+      const shouldExpand = typeof forceState === "boolean"
+        ? forceState
+        : !panel.classList.contains("expanded");
+
+      if (shouldExpand) {
+        panel.classList.add("expanded");
+        document.body.classList.add("preview-open");
+
+        if (button) {
+          button.innerText = "Reduzir";
+        }
+      } else {
+        panel.classList.remove("expanded");
+        document.body.classList.remove("preview-open");
+
+        if (button) {
+          button.innerText = "Expandir";
+        }
+      }
+
+      setTimeout(() => {
+        reloadPreview();
+      }, 250);
+    }
+
+    document.addEventListener("keydown", function(event) {
+      if (event.key === "Escape") {
+        togglePreviewSize(false);
+      }
+    });
 
     applyTheme(getSavedTheme());
     loadConfig();

@@ -95,6 +95,9 @@ sleep 2
 
 cd /app/OpenManus
 
+rm -rf /app/OpenManus/workspace
+ln -s /workspace /app/OpenManus/workspace
+
 . .venv/bin/activate
 
 echo "OpenManusWeb iniciado."
