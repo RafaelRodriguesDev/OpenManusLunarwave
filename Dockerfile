@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12-bookworm
 
 WORKDIR /app/OpenManus
 
@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     make \
     python3-dev \
+    pkg-config \
     libffi-dev \
     libssl-dev \
     libxml2-dev \
@@ -23,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g-dev \
     libjpeg-dev \
     libpng-dev \
+    libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir uv
@@ -33,7 +35,7 @@ RUN uv venv --python 3.12
 
 RUN uv pip install --upgrade pip setuptools wheel
 
-RUN uv pip install -r requirements.txt
+RUN uv pip install -r requirements.txt --verbose
 
 RUN python -m playwright install --with-deps chromium
 
