@@ -35,6 +35,32 @@ extra_chromium_args = [
   "--disable-gpu",
   "--window-size=1365,768"
 ]
+chrome_instance_path = ""
+wss_url = ""
+cdp_url = ""
+
+[search]
+engine = "DuckDuckGo"
+fallback_engines = ["Bing", "Google"]
+retry_delay = 60
+max_retries = 3
+lang = "pt"
+country = "br"
+
+[sandbox]
+use_sandbox = false
+image = "python:3.12-slim"
+work_dir = "/workspace"
+memory_limit = "1g"
+cpu_limit = 2.0
+timeout = 300
+network_enabled = true
+
+[daytona]
+daytona_api_key = "${DAYTONA_API_KEY:-not-used}"
+
+[sandbox.daytona]
+daytona_api_key = "${DAYTONA_API_KEY:-not-used}"
 
 [mcp]
 server_reference = "app.mcp.server"
@@ -42,6 +68,8 @@ server_reference = "app.mcp.server"
 [runflow]
 use_data_analysis_agent = false
 EOF
+
+echo "Config gerado em /app/OpenManus/config/config.toml"
 
 echo "Iniciando Xvfb..."
 Xvfb :99 -screen 0 1365x768x24 -ac +extension GLX +render -noreset &

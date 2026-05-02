@@ -32,6 +32,7 @@ services:
 
       WORKSPACE_DIR: /workspace
       DISPLAY: :99
+      DAYTONA_API_KEY: ${DAYTONA_API_KEY:-not-used}
 
     volumes:
       - openmanus_web_workspace:/workspace
