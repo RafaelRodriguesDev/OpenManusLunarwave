@@ -1,28 +1,31 @@
 import asyncio
+import html
 import os
+import sys
 import uuid
-import traceback
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 
 
-app = FastAPI(title="OpenManusWeb", version="0.1.0")
+app = FastAPI(title="OpenManusWeb", version="0.2.0")
+
+BASE_DIR = Path(os.environ.get("OPENMANUS_DIR", "/app/OpenManus")).resolve()
+WORKSPACE_DIR = Path(os.environ.get("WORKSPACE_DIR", "/workspace")).resolve()
 
 jobs: Dict[str, Dict[str, Any]] = {}
 subscribers: Dict[str, List[WebSocket]] = {}
-
-WORKSPACE_DIR = os.environ.get("WORKSPACE_DIR", "/workspace")
 
 
 class RunRequest(BaseModel):
     prompt: str
 
 
-def now_iso() -> str:
+def utc_now() -> str:
     return datetime.utcnow().isoformat()
 
 
@@ -33,18 +36,20 @@ def create_job(prompt: str) -> Dict[str, Any]:
         "id": job_id,
         "prompt": prompt,
         "status": "queued",
-        "created_at": now_iso(),
-        "updated_at": now_iso(),
+        "created_at": utc_now(),
+        "updated_at": utc_now(),
+        "logs": ["Job criado."],
+        "result": "",
+        "error": None,
+        "exit_code": None,
         "steps": [
             {"name": "Receber tarefa", "status": "done"},
-            {"name": "Carregar agente", "status": "pending"},
-            {"name": "Executar raciocínio", "status": "pending"},
-            {"name": "Gerar resultado", "status": "pending"},
+            {"name": "Preparar ambiente", "status": "pending"},
+            {"name": "Iniciar OpenManus", "status": "pending"},
+            {"name": "Executar tarefa", "status": "pending"},
+            {"name": "Capturar resultado", "status": "pending"},
             {"name": "Finalizar", "status": "pending"},
         ],
-        "logs": ["Job criado."],
-        "result": None,
-        "error": None,
     }
 
     jobs[job_id] = job
@@ -53,7 +58,7 @@ def create_job(prompt: str) -> Dict[str, Any]:
     return job
 
 
-async def notify_job(job_id: str) -> None:
+async def notify(job_id: str) -> None:
     if job_id not in jobs:
         return
 
@@ -74,9 +79,16 @@ async def notify_job(job_id: str) -> None:
 
 async def add_log(job_id: str, message: str) -> None:
     job = jobs[job_id]
-    job["logs"].append(message)
-    job["updated_at"] = now_iso()
-    await notify_job(job_id)
+    job["logs"].append(message.rstrip())
+    job["updated_at"] = utc_now()
+    await notify(job_id)
+
+
+async def set_status(job_id: str, status: str) -> None:
+    job = jobs[job_id]
+    job["status"] = status
+    job["updated_at"] = utc_now()
+    await notify(job_id)
 
 
 async def set_step(job_id: str, step_name: str, status: str) -> None:
@@ -85,82 +97,151 @@ async def set_step(job_id: str, step_name: str, status: str) -> None:
     for step in job["steps"]:
         if step["name"] == step_name:
             step["status"] = status
+            break
 
-    job["updated_at"] = now_iso()
-    await notify_job(job_id)
-
-
-async def set_status(job_id: str, status: str) -> None:
-    jobs[job_id]["status"] = status
-    jobs[job_id]["updated_at"] = now_iso()
-    await notify_job(job_id)
+    job["updated_at"] = utc_now()
+    await notify(job_id)
 
 
-async def run_openmanus_job(job_id: str, prompt: str) -> None:
+async def run_openmanus_process(job_id: str, prompt: str) -> None:
+    proc: Optional[asyncio.subprocess.Process] = None
+    output_lines: List[str] = []
+
     try:
         await set_status(job_id, "running")
 
-        await set_step(job_id, "Carregar agente", "running")
-        await add_log(job_id, "Carregando agente OpenManus...")
+        await set_step(job_id, "Preparar ambiente", "running")
+        await add_log(job_id, f"Diretório OpenManus: {BASE_DIR}")
+        await add_log(job_id, f"Workspace: {WORKSPACE_DIR}")
 
-        from app.agent.manus import Manus
+        if not BASE_DIR.exists():
+            raise RuntimeError(f"Diretório do OpenManus não encontrado: {BASE_DIR}")
 
-        agent = Manus()
+        main_py = BASE_DIR / "main.py"
 
-        await set_step(job_id, "Carregar agente", "done")
-        await set_step(job_id, "Executar raciocínio", "running")
-        await add_log(job_id, "Agente carregado com sucesso.")
-        await add_log(job_id, "Executando tarefa...")
+        if not main_py.exists():
+            raise RuntimeError(f"Arquivo main.py não encontrado em: {main_py}")
 
-        result = await agent.run(prompt)
+        config_file = BASE_DIR / "config" / "config.toml"
 
-        await set_step(job_id, "Executar raciocínio", "done")
-        await set_step(job_id, "Gerar resultado", "running")
+        if not config_file.exists():
+            raise RuntimeError(f"Arquivo config/config.toml não encontrado em: {config_file}")
 
-        jobs[job_id]["result"] = str(result) if result is not None else "Tarefa concluída."
-        jobs[job_id]["updated_at"] = now_iso()
+        await set_step(job_id, "Preparar ambiente", "done")
 
-        await add_log(job_id, "Resultado gerado.")
-        await set_step(job_id, "Gerar resultado", "done")
-        await set_step(job_id, "Finalizar", "done")
-        await set_status(job_id, "completed")
-        await add_log(job_id, "Execução finalizada.")
+        await set_step(job_id, "Iniciar OpenManus", "running")
+        await add_log(job_id, "Iniciando processo: python -u main.py")
+
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+        env["WORKSPACE_DIR"] = str(WORKSPACE_DIR)
+
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-u",
+            "main.py",
+            cwd=str(BASE_DIR),
+            env=env,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+
+        await set_step(job_id, "Iniciar OpenManus", "done")
+
+        await set_step(job_id, "Executar tarefa", "running")
+        await add_log(job_id, "Enviando prompt para o OpenManus...")
+
+        if proc.stdin is None:
+            raise RuntimeError("stdin do processo não está disponível.")
+
+        proc.stdin.write((prompt.strip() + "\n").encode("utf-8"))
+        await proc.stdin.drain()
+        proc.stdin.close()
+
+        if proc.stdout is None:
+            raise RuntimeError("stdout do processo não está disponível.")
+
+        while True:
+            line = await proc.stdout.readline()
+
+            if not line:
+                break
+
+            decoded = line.decode("utf-8", errors="replace").rstrip()
+            output_lines.append(decoded)
+
+            if decoded.strip():
+                await add_log(job_id, decoded)
+
+        exit_code = await proc.wait()
+
+        jobs[job_id]["exit_code"] = exit_code
+
+        await set_step(job_id, "Executar tarefa", "done")
+        await set_step(job_id, "Capturar resultado", "running")
+
+        final_output = "\n".join(output_lines).strip()
+
+        if exit_code == 0:
+            jobs[job_id]["result"] = final_output or "OpenManus finalizou sem saída textual."
+            await add_log(job_id, "Processo finalizado com sucesso.")
+            await set_step(job_id, "Capturar resultado", "done")
+            await set_step(job_id, "Finalizar", "done")
+            await set_status(job_id, "completed")
+        else:
+            jobs[job_id]["result"] = final_output
+            jobs[job_id]["error"] = f"OpenManus finalizou com código {exit_code}."
+            await add_log(job_id, f"Processo finalizado com erro. Exit code: {exit_code}")
+            await set_step(job_id, "Capturar resultado", "failed")
+            await set_step(job_id, "Finalizar", "failed")
+            await set_status(job_id, "failed")
 
     except Exception as ex:
-        error_text = str(ex)
-        trace = traceback.format_exc()
+        if proc is not None and proc.returncode is None:
+            try:
+                proc.kill()
+            except Exception:
+                pass
 
-        jobs[job_id]["error"] = error_text
-        jobs[job_id]["status"] = "failed"
-        jobs[job_id]["updated_at"] = now_iso()
+        jobs[job_id]["error"] = str(ex)
+        jobs[job_id]["updated_at"] = utc_now()
 
-        await add_log(job_id, f"Erro: {error_text}")
-        await add_log(job_id, trace)
+        await add_log(job_id, f"Erro: {str(ex)}")
 
+        await set_step(job_id, "Finalizar", "failed")
         await set_status(job_id, "failed")
+
+
+def safe_workspace_path(relative_path: str) -> Path:
+    requested_path = (WORKSPACE_DIR / relative_path).resolve()
+
+    if not str(requested_path).startswith(str(WORKSPACE_DIR)):
+        raise HTTPException(status_code=400, detail="Caminho inválido.")
+
+    return requested_path
 
 
 def list_workspace_files() -> List[Dict[str, Any]]:
     files: List[Dict[str, Any]] = []
 
-    if not os.path.exists(WORKSPACE_DIR):
+    if not WORKSPACE_DIR.exists():
         return files
 
-    for root, _, filenames in os.walk(WORKSPACE_DIR):
-        for filename in filenames:
-            full_path = os.path.join(root, filename)
-            relative_path = os.path.relpath(full_path, WORKSPACE_DIR)
+    for path in WORKSPACE_DIR.rglob("*"):
+        if not path.is_file():
+            continue
 
-            try:
-                stat = os.stat(full_path)
-                files.append({
-                    "name": filename,
-                    "path": relative_path,
-                    "size": stat.st_size,
-                    "updated_at": datetime.utcfromtimestamp(stat.st_mtime).isoformat(),
-                })
-            except Exception:
-                continue
+        try:
+            stat = path.stat()
+            files.append({
+                "name": path.name,
+                "path": str(path.relative_to(WORKSPACE_DIR)),
+                "size": stat.st_size,
+                "updated_at": datetime.utcfromtimestamp(stat.st_mtime).isoformat(),
+            })
+        except Exception:
+            continue
 
     return sorted(files, key=lambda item: item["path"])
 
@@ -173,6 +254,8 @@ async def index() -> str:
 <head>
     <meta charset="UTF-8" />
     <title>OpenManusWeb</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
     <style>
         * {
             box-sizing: border-box;
@@ -180,7 +263,7 @@ async def index() -> str:
 
         body {
             margin: 0;
-            background: #070b14;
+            background: #060914;
             color: #e5e7eb;
             font-family: Inter, Arial, sans-serif;
         }
@@ -188,15 +271,16 @@ async def index() -> str:
         .app {
             height: 100vh;
             display: grid;
-            grid-template-columns: 360px 1fr;
+            grid-template-columns: 380px 1fr;
             overflow: hidden;
         }
 
         .sidebar {
+            background: linear-gradient(180deg, #0b1020, #060914);
             border-right: 1px solid #1f2937;
-            background: #0b1020;
             display: flex;
             flex-direction: column;
+            min-width: 0;
         }
 
         .brand {
@@ -207,7 +291,7 @@ async def index() -> str:
         .brand h1 {
             margin: 0;
             font-size: 22px;
-            color: #f9fafb;
+            letter-spacing: -0.03em;
         }
 
         .brand p {
@@ -228,6 +312,7 @@ async def index() -> str:
             margin-bottom: 12px;
             line-height: 1.45;
             font-size: 14px;
+            white-space: pre-wrap;
         }
 
         .bubble.system {
@@ -237,7 +322,7 @@ async def index() -> str:
         }
 
         .bubble.user {
-            background: #1d4ed8;
+            background: linear-gradient(135deg, #1d4ed8, #7c3aed);
             color: white;
         }
 
@@ -249,7 +334,7 @@ async def index() -> str:
 
         textarea {
             width: 100%;
-            height: 120px;
+            height: 130px;
             resize: none;
             background: #020617;
             color: #f8fafc;
@@ -258,6 +343,10 @@ async def index() -> str:
             padding: 14px;
             outline: none;
             font-size: 14px;
+        }
+
+        textarea:focus {
+            border-color: #60a5fa;
         }
 
         button {
@@ -280,7 +369,8 @@ async def index() -> str:
 
         .main {
             display: grid;
-            grid-template-rows: 70px 1fr 260px;
+            grid-template-rows: 72px 1fr 260px;
+            min-width: 0;
             overflow: hidden;
         }
 
@@ -295,7 +385,8 @@ async def index() -> str:
 
         .topbar-title {
             font-size: 18px;
-            font-weight: 700;
+            font-weight: 800;
+            letter-spacing: -0.02em;
         }
 
         .status-pill {
@@ -307,9 +398,9 @@ async def index() -> str:
             font-size: 13px;
         }
 
-        .workspace {
+        .grid {
             display: grid;
-            grid-template-columns: 1fr 380px;
+            grid-template-columns: minmax(0, 1.1fr) 420px;
             overflow: hidden;
         }
 
@@ -317,6 +408,7 @@ async def index() -> str:
             padding: 22px;
             overflow: auto;
             border-right: 1px solid #1f2937;
+            min-width: 0;
         }
 
         .panel:last-child {
@@ -338,7 +430,7 @@ async def index() -> str:
             background: #0f172a;
             border: 1px solid #1f2937;
             border-radius: 16px;
-            padding: 16px;
+            padding: 14px;
             display: flex;
             align-items: center;
             gap: 12px;
@@ -349,6 +441,7 @@ async def index() -> str:
             height: 13px;
             border-radius: 999px;
             background: #64748b;
+            flex: 0 0 auto;
         }
 
         .step.done .dot {
@@ -365,7 +458,7 @@ async def index() -> str:
         }
 
         .step-name {
-            font-weight: 700;
+            font-weight: 800;
         }
 
         .step-status {
@@ -378,11 +471,12 @@ async def index() -> str:
             background: #020617;
             border: 1px solid #334155;
             border-radius: 16px;
-            min-height: 280px;
+            min-height: 230px;
             padding: 16px;
             white-space: pre-wrap;
             line-height: 1.5;
             color: #dbeafe;
+            overflow: auto;
         }
 
         .files {
@@ -402,10 +496,18 @@ async def index() -> str:
             display: block;
             color: #f8fafc;
             margin-bottom: 4px;
+            word-break: break-all;
         }
 
         .file span {
             color: #94a3b8;
+        }
+
+        .file a {
+            color: #93c5fd;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 8px;
         }
 
         .logs {
@@ -422,6 +524,24 @@ async def index() -> str:
         .empty {
             color: #64748b;
         }
+
+        @media (max-width: 980px) {
+            .app {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                display: none;
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .main {
+                grid-template-rows: 72px 1fr 240px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -429,7 +549,7 @@ async def index() -> str:
         <aside class="sidebar">
             <div class="brand">
                 <h1>OpenManusWeb</h1>
-                <p>Agente na VPS com execução visual básica</p>
+                <p>Interface web para executar o OpenManus na VPS</p>
             </div>
 
             <div class="chat" id="chat">
@@ -439,7 +559,7 @@ async def index() -> str:
             </div>
 
             <div class="composer">
-                <textarea id="prompt" placeholder="Ex: Crie uma landing page simples, pesquise um tema, analise um projeto..."></textarea>
+                <textarea id="prompt" placeholder="Ex: Crie um relatório sobre X, gere uma landing page, pesquise algo, analise um site..."></textarea>
                 <button id="runBtn" onclick="runTask()">Executar tarefa</button>
             </div>
         </aside>
@@ -450,7 +570,7 @@ async def index() -> str:
                 <div class="status-pill">Status: <span id="status">aguardando</span></div>
             </header>
 
-            <section class="workspace">
+            <section class="grid">
                 <div class="panel">
                     <h2>Fluxo do agente</h2>
                     <div class="timeline" id="timeline">
@@ -499,8 +619,8 @@ async def index() -> str:
                     div.innerHTML = `
                         <div class="dot"></div>
                         <div>
-                            <div class="step-name">${step.name}</div>
-                            <div class="step-status">${step.status}</div>
+                            <div class="step-name">${escapeHtml(step.name)}</div>
+                            <div class="step-status">${escapeHtml(step.status)}</div>
                         </div>
                     `;
                     timeline.appendChild(div);
@@ -521,6 +641,18 @@ async def index() -> str:
                 document.getElementById("runBtn").disabled = false;
                 loadFiles();
             }
+
+            const logs = document.getElementById("logs");
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
         }
 
         async function runTask() {
@@ -574,6 +706,10 @@ async def index() -> str:
             socket.onerror = function() {
                 document.getElementById("logs").innerText += "\\nErro no WebSocket.";
             };
+
+            socket.onclose = function() {
+                console.log("WebSocket fechado.");
+            };
         }
 
         async function loadFiles() {
@@ -592,8 +728,10 @@ async def index() -> str:
                 const div = document.createElement("div");
                 div.className = "file";
                 div.innerHTML = `
-                    <strong>${file.path}</strong>
+                    <strong>${escapeHtml(file.path)}</strong>
                     <span>${file.size} bytes</span>
+                    <br>
+                    <a target="_blank" href="/api/workspace/file?path=${encodeURIComponent(file.path)}">abrir arquivo</a>
                 `;
                 files.appendChild(div);
             });
@@ -615,7 +753,7 @@ async def run_task(request: RunRequest) -> JSONResponse:
 
     job = create_job(prompt)
 
-    asyncio.create_task(run_openmanus_job(job["id"], prompt))
+    asyncio.create_task(run_openmanus_process(job["id"], prompt))
 
     return JSONResponse({
         "job_id": job["id"],
@@ -646,9 +784,14 @@ async def websocket_job(websocket: WebSocket, job_id: str) -> None:
         await websocket.send_json(jobs[job_id])
 
         while True:
-            await websocket.receive_text()
+            await asyncio.sleep(30)
+            await websocket.send_json(jobs[job_id])
 
     except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
         try:
             subscribers[job_id].remove(websocket)
         except Exception:
@@ -658,13 +801,32 @@ async def websocket_job(websocket: WebSocket, job_id: str) -> None:
 @app.get("/api/workspace/files")
 async def workspace_files() -> Dict[str, Any]:
     return {
-        "workspace": WORKSPACE_DIR,
+        "workspace": str(WORKSPACE_DIR),
         "files": list_workspace_files(),
     }
 
 
+@app.get("/api/workspace/file")
+async def workspace_file(path: str) -> PlainTextResponse:
+    target = safe_workspace_path(path)
+
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
+
+    max_size = 1024 * 1024
+
+    if target.stat().st_size > max_size:
+        raise HTTPException(status_code=413, detail="Arquivo muito grande para preview.")
+
+    content = target.read_text(encoding="utf-8", errors="replace")
+
+    return PlainTextResponse(content)
+
+
 @app.get("/health")
-async def health() -> Dict[str, str]:
+async def health() -> Dict[str, Any]:
     return {
         "status": "ok",
+        "base_dir": str(BASE_DIR),
+        "workspace_dir": str(WORKSPACE_DIR),
     }
