@@ -17,6 +17,8 @@ services:
       - "6080:6080"
 
     environment:
+      WEB_DIR: /app/OpenManus/web
+      NOVNC_URL: "http://65.75.200.35:6080/vnc.html"
       LLM_MODEL: ${LLM_MODEL:-deepseek-chat}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.deepseek.com}
       LLM_API_KEY: ${LLM_API_KEY}
