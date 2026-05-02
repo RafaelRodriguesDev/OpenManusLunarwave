@@ -12,20 +12,24 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 
-if Path("/usr/share/novnc").exists():
-    app.mount("/vnc", StaticFiles(directory="/usr/share/novnc"), name="novnc")
+app = FastAPI(title="OpenManusWeb", version="0.3.1")
 
 BASE_DIR = Path(os.environ.get("OPENMANUS_DIR", "/app/OpenManus")).resolve()
 WORKSPACE_DIR = Path(os.environ.get("WORKSPACE_DIR", "/workspace")).resolve()
 WEB_DIR = Path(os.environ.get("WEB_DIR", "/app/OpenManus/web")).resolve()
+NOVNC_DIR = Path(os.environ.get("NOVNC_DIR", "/usr/share/novnc")).resolve()
+
 NOVNC_URL = os.environ.get(
     "NOVNC_URL",
-    "/vnc/vnc.html?autoconnect=true&resize=scale&path=vnc/websockify"
+    "/vnc/vnc.html?autoconnect=true&resize=scale&path=vnc/websockify",
 )
 
-NOVNC_DIR = Path(os.environ.get("NOVNC_DIR", "/usr/share/novnc")).resolve()
 VNC_HOST = os.environ.get("VNC_HOST", "127.0.0.1")
 VNC_PORT = int(os.environ.get("VNC_PORT", "5900"))
+
+if NOVNC_DIR.exists():
+    app.mount("/vnc", StaticFiles(directory=str(NOVNC_DIR)), name="novnc")
+
 
 jobs: Dict[str, Dict[str, Any]] = {}
 subscribers: Dict[str, List[WebSocket]] = {}
@@ -325,46 +329,6 @@ async def websocket_job(websocket: WebSocket, job_id: str) -> None:
             pass
 
 
-@app.get("/api/workspace/files")
-async def workspace_files() -> Dict[str, Any]:
-    return {
-        "workspace": str(WORKSPACE_DIR),
-        "files": list_workspace_files(),
-    }
-
-
-@app.get("/api/workspace/file")
-async def workspace_file(path: str) -> PlainTextResponse:
-    target = safe_workspace_path(path)
-
-    if not target.exists() or not target.is_file():
-        raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
-
-    max_size = 1024 * 1024
-
-    if target.stat().st_size > max_size:
-        raise HTTPException(status_code=413, detail="Arquivo muito grande para preview.")
-
-    content = target.read_text(encoding="utf-8", errors="replace")
-
-    return PlainTextResponse(content)
-
-
-@app.get("/preview")
-async def preview():
-    return RedirectResponse(url=NOVNC_URL)
-
-
-@app.get("/api/config")
-async def frontend_config() -> Dict[str, Any]:
-    return {
-        "novnc_url": NOVNC_URL,
-        "workspace_dir": str(WORKSPACE_DIR),
-        "web_dir": str(WEB_DIR),
-        "vnc_host": VNC_HOST,
-        "vnc_port": VNC_PORT,
-    }
-
 @app.websocket("/vnc/websockify")
 async def vnc_websocket_proxy(websocket: WebSocket) -> None:
     await websocket.accept()
@@ -421,6 +385,48 @@ async def vnc_websocket_proxy(websocket: WebSocket) -> None:
         except Exception:
             pass
 
+
+@app.get("/api/workspace/files")
+async def workspace_files() -> Dict[str, Any]:
+    return {
+        "workspace": str(WORKSPACE_DIR),
+        "files": list_workspace_files(),
+    }
+
+
+@app.get("/api/workspace/file")
+async def workspace_file(path: str) -> PlainTextResponse:
+    target = safe_workspace_path(path)
+
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
+
+    max_size = 1024 * 1024
+
+    if target.stat().st_size > max_size:
+        raise HTTPException(status_code=413, detail="Arquivo muito grande para preview.")
+
+    content = target.read_text(encoding="utf-8", errors="replace")
+
+    return PlainTextResponse(content)
+
+
+@app.get("/preview")
+async def preview():
+    return RedirectResponse(url=NOVNC_URL)
+
+
+@app.get("/api/config")
+async def frontend_config() -> Dict[str, Any]:
+    return {
+        "novnc_url": NOVNC_URL,
+        "workspace_dir": str(WORKSPACE_DIR),
+        "web_dir": str(WEB_DIR),
+        "vnc_host": VNC_HOST,
+        "vnc_port": VNC_PORT,
+    }
+
+
 @app.get("/health")
 async def health() -> Dict[str, Any]:
     return {
@@ -428,7 +434,10 @@ async def health() -> Dict[str, Any]:
         "base_dir": str(BASE_DIR),
         "workspace_dir": str(WORKSPACE_DIR),
         "web_dir": str(WEB_DIR),
+        "novnc_dir": str(NOVNC_DIR),
         "novnc_url": NOVNC_URL,
+        "vnc_host": VNC_HOST,
+        "vnc_port": VNC_PORT,
         "display": os.environ.get("DISPLAY", ""),
         "jobs_count": len(jobs),
     }
