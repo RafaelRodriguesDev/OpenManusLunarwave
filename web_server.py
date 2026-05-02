@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+import signal
 import sys
 import uuid
 from datetime import datetime
@@ -13,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 
-app = FastAPI(title="OpenManusWeb", version="0.4.1")
+app = FastAPI(title="OpenManusWeb", version="0.5.0")
 
 BASE_DIR = Path(os.environ.get("OPENMANUS_DIR", "/app/OpenManus")).resolve()
 WORKSPACE_DIR = Path(os.environ.get("WORKSPACE_DIR", "/workspace")).resolve()
@@ -34,6 +35,7 @@ if NOVNC_DIR.exists():
 
 jobs: Dict[str, Dict[str, Any]] = {}
 subscribers: Dict[str, List[WebSocket]] = {}
+running_processes: Dict[str, asyncio.subprocess.Process] = {}
 
 
 class RunRequest(BaseModel):
@@ -59,6 +61,7 @@ def create_job(prompt: str) -> Dict[str, Any]:
         "result": "",
         "error": None,
         "exit_code": None,
+        "cancel_requested": False,
         "steps": [
             {"name": "Receber tarefa", "status": "done"},
             {"name": "Preparar ambiente", "status": "pending"},
@@ -141,6 +144,9 @@ async def add_thought(job_id: str, thought: str) -> None:
 
 
 async def set_status(job_id: str, status: str) -> None:
+    if job_id not in jobs:
+        return
+
     job = jobs[job_id]
     job["status"] = status
     job["updated_at"] = utc_now()
@@ -149,6 +155,9 @@ async def set_status(job_id: str, status: str) -> None:
 
 
 async def set_step(job_id: str, step_name: str, status: str) -> None:
+    if job_id not in jobs:
+        return
+
     job = jobs[job_id]
 
     for step in job["steps"]:
@@ -159,6 +168,15 @@ async def set_step(job_id: str, step_name: str, status: str) -> None:
     job["updated_at"] = utc_now()
 
     await notify(job_id)
+
+
+def is_cancelled(job_id: str) -> bool:
+    job = jobs.get(job_id)
+
+    if not job:
+        return False
+
+    return job.get("status") == "cancelled" or bool(job.get("cancel_requested"))
 
 
 def clean_log_line(line: str) -> str:
@@ -292,6 +310,77 @@ def extract_final_answer(output_lines: List[str]) -> str:
     return "Tarefa concluída com sucesso."
 
 
+async def terminate_process(job_id: str, timeout_seconds: int = 5) -> bool:
+    proc = running_processes.get(job_id)
+
+    if proc is None:
+        return False
+
+    if proc.returncode is not None:
+        running_processes.pop(job_id, None)
+        return True
+
+    try:
+        process_group_id = os.getpgid(proc.pid)
+        os.killpg(process_group_id, signal.SIGTERM)
+    except ProcessLookupError:
+        running_processes.pop(job_id, None)
+        return True
+    except Exception:
+        try:
+            proc.terminate()
+        except ProcessLookupError:
+            running_processes.pop(job_id, None)
+            return True
+        except Exception:
+            pass
+
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=timeout_seconds)
+        running_processes.pop(job_id, None)
+        return True
+    except asyncio.TimeoutError:
+        pass
+
+    try:
+        process_group_id = os.getpgid(proc.pid)
+        os.killpg(process_group_id, signal.SIGKILL)
+    except ProcessLookupError:
+        running_processes.pop(job_id, None)
+        return True
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+    try:
+        await proc.wait()
+    except Exception:
+        pass
+
+    running_processes.pop(job_id, None)
+
+    return True
+
+
+async def mark_job_cancelled(job_id: str) -> None:
+    if job_id not in jobs:
+        return
+
+    jobs[job_id]["cancel_requested"] = True
+    jobs[job_id]["status"] = "cancelled"
+    jobs[job_id]["result"] = "Execução cancelada pelo usuário."
+    jobs[job_id]["error"] = None
+    jobs[job_id]["updated_at"] = utc_now()
+
+    await set_step(job_id, "Executar tarefa", "cancelled")
+    await set_step(job_id, "Capturar resultado", "cancelled")
+    await set_step(job_id, "Finalizar", "cancelled")
+    await add_log(job_id, "Execução cancelada pelo usuário.")
+    await notify(job_id)
+
+
 async def run_openmanus_process(job_id: str, prompt: str) -> None:
     proc: Optional[asyncio.subprocess.Process] = None
     output_lines: List[str] = []
@@ -316,6 +405,10 @@ async def run_openmanus_process(job_id: str, prompt: str) -> None:
         if not config_file.exists():
             raise RuntimeError(f"Arquivo config/config.toml não encontrado em: {config_file}")
 
+        if is_cancelled(job_id):
+            await mark_job_cancelled(job_id)
+            return
+
         await set_step(job_id, "Preparar ambiente", "done")
 
         await set_step(job_id, "Iniciar OpenManus", "running")
@@ -335,9 +428,17 @@ async def run_openmanus_process(job_id: str, prompt: str) -> None:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            preexec_fn=os.setsid,
         )
 
+        running_processes[job_id] = proc
+
         await set_step(job_id, "Iniciar OpenManus", "done")
+
+        if is_cancelled(job_id):
+            await terminate_process(job_id)
+            await mark_job_cancelled(job_id)
+            return
 
         await set_step(job_id, "Executar tarefa", "running")
         await add_log(job_id, "Enviando prompt para o OpenManus...")
@@ -353,6 +454,11 @@ async def run_openmanus_process(job_id: str, prompt: str) -> None:
             raise RuntimeError("stdout do processo não está disponível.")
 
         while True:
+            if is_cancelled(job_id):
+                await terminate_process(job_id)
+                await mark_job_cancelled(job_id)
+                return
+
             line = await proc.stdout.readline()
 
             if not line:
@@ -384,6 +490,12 @@ async def run_openmanus_process(job_id: str, prompt: str) -> None:
 
         exit_code = await proc.wait()
 
+        running_processes.pop(job_id, None)
+
+        if is_cancelled(job_id):
+            await mark_job_cancelled(job_id)
+            return
+
         jobs[job_id]["exit_code"] = exit_code
 
         await set_step(job_id, "Executar tarefa", "done")
@@ -408,9 +520,15 @@ async def run_openmanus_process(job_id: str, prompt: str) -> None:
             await set_status(job_id, "failed")
 
     except Exception as ex:
+        running_processes.pop(job_id, None)
+
+        if is_cancelled(job_id):
+            await mark_job_cancelled(job_id)
+            return
+
         if proc is not None and proc.returncode is None:
             try:
-                proc.kill()
+                await terminate_process(job_id)
             except Exception:
                 pass
 
@@ -421,6 +539,9 @@ async def run_openmanus_process(job_id: str, prompt: str) -> None:
 
         await set_step(job_id, "Finalizar", "failed")
         await set_status(job_id, "failed")
+
+    finally:
+        running_processes.pop(job_id, None)
 
 
 def safe_workspace_path(relative_path: str) -> Path:
@@ -487,6 +608,37 @@ async def run_task(request: RunRequest) -> JSONResponse:
         "job_id": job["id"],
         "status": job["status"],
     })
+
+
+@app.post("/api/jobs/{job_id}/cancel")
+async def cancel_job(job_id: str) -> Dict[str, Any]:
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job não encontrado.")
+
+    job = jobs[job_id]
+    current_status = job.get("status")
+
+    if current_status in ["completed", "failed", "cancelled"]:
+        return {
+            "job_id": job_id,
+            "status": current_status,
+            "message": "Job já foi finalizado.",
+        }
+
+    job["cancel_requested"] = True
+    job["updated_at"] = utc_now()
+
+    await add_log(job_id, "Solicitação de cancelamento recebida.")
+    await notify(job_id)
+
+    await terminate_process(job_id)
+    await mark_job_cancelled(job_id)
+
+    return {
+        "job_id": job_id,
+        "status": "cancelled",
+        "message": "Execução cancelada.",
+    }
 
 
 @app.get("/api/jobs/{job_id}")
@@ -637,4 +789,5 @@ async def health() -> Dict[str, Any]:
         "vnc_port": VNC_PORT,
         "display": os.environ.get("DISPLAY", ""),
         "jobs_count": len(jobs),
+        "running_processes": list(running_processes.keys()),
     }
