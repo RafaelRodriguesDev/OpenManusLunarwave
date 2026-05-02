@@ -3,7 +3,7 @@ version: "3.9"
 services:
   openmanus:
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile
 
     container_name: openmanus
