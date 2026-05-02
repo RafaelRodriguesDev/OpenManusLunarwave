@@ -8,15 +8,24 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 
-app = FastAPI(title="OpenManusWeb", version="0.3.0")
+if Path("/usr/share/novnc").exists():
+    app.mount("/vnc", StaticFiles(directory="/usr/share/novnc"), name="novnc")
 
 BASE_DIR = Path(os.environ.get("OPENMANUS_DIR", "/app/OpenManus")).resolve()
 WORKSPACE_DIR = Path(os.environ.get("WORKSPACE_DIR", "/workspace")).resolve()
 WEB_DIR = Path(os.environ.get("WEB_DIR", "/app/OpenManus/web")).resolve()
-NOVNC_URL = os.environ.get("NOVNC_URL", "http://65.75.200.35:6080/vnc.html")
+NOVNC_URL = os.environ.get(
+    "NOVNC_URL",
+    "/vnc/vnc.html?autoconnect=true&resize=scale&path=vnc/websockify"
+)
+
+NOVNC_DIR = Path(os.environ.get("NOVNC_DIR", "/usr/share/novnc")).resolve()
+VNC_HOST = os.environ.get("VNC_HOST", "127.0.0.1")
+VNC_PORT = int(os.environ.get("VNC_PORT", "5900"))
 
 jobs: Dict[str, Dict[str, Any]] = {}
 subscribers: Dict[str, List[WebSocket]] = {}
@@ -345,6 +354,72 @@ async def workspace_file(path: str) -> PlainTextResponse:
 async def preview():
     return RedirectResponse(url=NOVNC_URL)
 
+
+@app.get("/api/config")
+async def frontend_config() -> Dict[str, Any]:
+    return {
+        "novnc_url": NOVNC_URL,
+        "workspace_dir": str(WORKSPACE_DIR),
+        "web_dir": str(WEB_DIR),
+        "vnc_host": VNC_HOST,
+        "vnc_port": VNC_PORT,
+    }
+
+@app.websocket("/vnc/websockify")
+async def vnc_websocket_proxy(websocket: WebSocket) -> None:
+    await websocket.accept()
+
+    reader = None
+    writer = None
+
+    try:
+        reader, writer = await asyncio.open_connection(VNC_HOST, VNC_PORT)
+
+        async def browser_to_vnc() -> None:
+            while True:
+                message = await websocket.receive()
+
+                if message.get("type") == "websocket.disconnect":
+                    break
+
+                if "bytes" in message and message["bytes"] is not None:
+                    writer.write(message["bytes"])
+                    await writer.drain()
+
+                elif "text" in message and message["text"] is not None:
+                    writer.write(message["text"].encode("latin-1"))
+                    await writer.drain()
+
+        async def vnc_to_browser() -> None:
+            while True:
+                data = await reader.read(4096)
+
+                if not data:
+                    break
+
+                await websocket.send_bytes(data)
+
+        await asyncio.gather(browser_to_vnc(), vnc_to_browser())
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as ex:
+        try:
+            await websocket.send_text(f"VNC proxy error: {str(ex)}")
+        except Exception:
+            pass
+    finally:
+        try:
+            if writer is not None:
+                writer.close()
+                await writer.wait_closed()
+        except Exception:
+            pass
+
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 @app.get("/health")
 async def health() -> Dict[str, Any]:

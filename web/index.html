@@ -679,7 +679,7 @@
               <button class="btn ghost" style="padding: 6px 9px;" onclick="reloadPreview()">↻</button>
             </div>
 
-            <iframe id="previewFrame" src="/preview"></iframe>
+            <iframe id="previewFrame" src="about:blank"></iframe>
           </div>
         </div>
 
@@ -909,15 +909,6 @@
       });
     }
 
-    function reloadPreview() {
-      const frame = document.getElementById("previewFrame");
-      frame.src = frame.src;
-    }
-
-    function openPreview() {
-      window.open("/preview", "_blank");
-    }
-
     function clearLogs() {
       document.getElementById("logs").innerText = "";
     }
@@ -929,8 +920,33 @@
       updateStatus("aguardando");
     }
 
+    async function loadConfig() {
+    try {
+        const response = await fetch("/api/config");
+        const config = await response.json();
+
+        if (config.novnc_url) {
+        document.getElementById("previewFrame").src = config.novnc_url;
+        } else {
+        document.getElementById("previewFrame").src = "/preview";
+        }
+    } catch (error) {
+        document.getElementById("previewFrame").src = "/preview";
+    }
+    }
+
+    function reloadPreview() {
+    loadConfig();
+    }
+
+    function openPreview() {
+    window.open("/preview", "_blank");
+    }   
+
     applyTheme(getSavedTheme());
+    loadConfig();
     loadFiles();
+    
   </script>
 </body>
 </html>

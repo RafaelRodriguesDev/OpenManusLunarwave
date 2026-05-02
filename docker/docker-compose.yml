@@ -14,11 +14,11 @@ services:
 
     ports:
       - "8001:8000"
-      - "6080:6080"
 
     environment:
       WEB_DIR: /app/OpenManus/web
-      NOVNC_URL: "http://65.75.200.35:6080/vnc.html"
+      NOVNC_URL: "/vnc/vnc.html?autoconnect=true&resize=scale&path=vnc/websockify"
+
       LLM_MODEL: ${LLM_MODEL:-deepseek-chat}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.deepseek.com}
       LLM_API_KEY: ${LLM_API_KEY}

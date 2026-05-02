@@ -54,19 +54,16 @@ fluxbox &
 sleep 2
 
 echo "Iniciando x11vnc..."
-x11vnc -display :99 -forever -shared -nopw -listen 0.0.0.0 -xkb &
+x11vnc -display :99 -forever -shared -nopw -listen 127.0.0.1 -xkb &
 
 sleep 2
-
-echo "Iniciando noVNC..."
-websockify --web=/usr/share/novnc/ 0.0.0.0:6080 localhost:5900 &
 
 cd /app/OpenManus
 
 . .venv/bin/activate
 
 echo "OpenManusWeb iniciado."
-echo "Interface: http://IP_DA_VPS:8000"
-echo "noVNC: http://IP_DA_VPS:6080/vnc.html"
+echo "Interface pública: http://IP_DA_VPS:8001"
+echo "Preview interno: /vnc/vnc.html?autoconnect=true&resize=scale&path=vnc/websockify"
 
 exec uvicorn web_server:app --host 0.0.0.0 --port 8000
