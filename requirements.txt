@@ -43,3 +43,4 @@ setuptools~=75.8.0
 
 structlog>=24.1.0
 websockets>=12.0
+daytona
