@@ -4,6 +4,7 @@ WORKDIR /app/OpenManus
 
 ENV PYTHONUNBUFFERED=1
 ENV PIP_NO_CACHE_DIR=1
+ENV PATH="/app/OpenManus/.venv/bin:$PATH"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
@@ -22,15 +23,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g-dev \
     libjpeg-dev \
     libpng-dev \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir uv
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir uv
 
 COPY . .
 
-RUN uv pip install --system --upgrade pip setuptools wheel
+RUN uv venv --python 3.12
 
-RUN uv pip install --system -r requirements.txt
+RUN uv pip install --upgrade pip setuptools wheel
+
+RUN uv pip install -r requirements.txt
 
 RUN python -m playwright install --with-deps chromium
 
